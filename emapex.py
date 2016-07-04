@@ -16,13 +16,17 @@ import pickle as _pickle
 import copy as _copy
 import glob as _glob
 import os as _os
-import sys as _sys
 import gsw
 
 import utils
 
 __all__ = ['Profile', 'EMApexFloat', 'mean_profile', 'up_down_indices',
-           'find_file', 'load']
+           'find_file', 'load', 'load_DIMES']
+
+# All DIMES float ID.
+FIDS_DIMES = np.array([3767, 4086, 4087, 4089, 4090, 4594, 4595, 4596, 4597,
+                       4812, 4813, 4814, 4815, 4976, 4977, 6478, 6480, 6481,
+                       6625, 6626], dtype=np.uint16)
 
 
 class Profile(object):
@@ -190,7 +194,8 @@ class EMApexFloat(object):
     contained on a ctd array
 
     """
-    def __init__(self, filepath, floatID, post_process=True, regrid=False):
+    def __init__(self, filepath, floatID, post_process=True, regrid=False,
+                 verbose=True):
 
         print("\nInitialising")
         print("------------\n")
@@ -220,7 +225,8 @@ class EMApexFloat(object):
             d = np.ndim(data[key])
 
             if d < 1 or d > 2 or '__' in key:
-                print("* Skipping: {}.".format(key))
+                if verbose:
+                    print("* Skipping: {}.".format(key))
                 continue
             elif d == 1:
                 setattr(self, key, data[key][isFloat])
@@ -229,17 +235,21 @@ class EMApexFloat(object):
 #                setattr(self, key, flip_cols(data[key][:, isFloat], flip_indx))
                 setattr(self, key, data[key][:, isFloat])
             else:
-                print("* Don't know what to do with {}, skipping".format(key))
+                if verbose:
+                    print("* Don't know what to do with {}, skipping".format(key))
 
-            print("  Loaded: {}.".format(key))
+            if verbose:
+                print("  Loaded: {}.".format(key))
 
         print("All numerical data appears to have been loaded successfully.\n")
 
-        print("Creating time variable dUTC with units of seconds.")
+        if verbose:
+            print("Creating time variable dUTC with units of seconds.")
         self.dUTC = (self.UTC - self.UTC_start)*86400
         self.dUTCef = (self.UTCef - self.UTC_start)*86400
 
-        print("Interpolated GPS positions to starts and ends of profiles.")
+        if verbose:
+            print("Interpolated GPS positions to starts and ends of profiles.")
         # GPS interpolation to the start and end time of each half profile.
         idxs = ~np.isnan(self.lon_gps) & ~np.isnan(self.lat_gps)
         self.lon_start = np.interp(self.UTC_start, self.utc_gps[idxs],
@@ -251,7 +261,8 @@ class EMApexFloat(object):
         self.lat_end = np.interp(self.UTC_end, self.utc_gps[idxs],
                                  self.lat_gps[idxs])
 
-        print("Calculating heights.")
+        if verbose:
+            print("Calculating heights.")
         # Depth.
         self.z = gsw.z_from_p(self.P, self.lat_start)
         self.z_ca = gsw.z_from_p(self.P_ca, self.lat_start)
@@ -262,21 +273,24 @@ class EMApexFloat(object):
         self.Profiles = np.array([Profile(self, h) for h in self.hpid])
 
         if post_process:
-            self.post_process()
+            self.post_process(verbose=verbose)
 
         if regrid:
-            self.generate_regular_grids()
+            self.generate_regular_grids(verbose=verbose)
 
-    def post_process(self):
+    def post_process(self, verbose=True):
 
         print("\nPost processing")
         print("---------------\n")
-        print("Calculating distance along trajectory.")
+
+        if verbose:
+            print("Calculating distance along trajectory.")
         # Distance along track from first half profile.
         self.__ddist = utils.lldist(self.lon_start, self.lat_start)
         self.dist = np.hstack((0., np.cumsum(self.__ddist)))
 
-        print("Interpolating distance to measurements.")
+        if verbose:
+            print("Interpolating distance to measurements.")
         # Distances, velocities and speeds of each half profile.
         self.profile_ddist = np.zeros_like(self.lon_start)
         self.profile_dt = np.zeros_like(self.lon_start)
@@ -302,27 +316,31 @@ class EMApexFloat(object):
 
         self.dist_ef = self.__regrid('ctd', 'ef', self.dist_ctd)
 
-        print("Estimating bearings.")
+        if verbose:
+            print("Estimating bearings.")
         # Pythagorian approximation (?) of bearing.
         self.profile_bearing = np.arctan2(self.lon_end - self.lon_start,
                                           self.lat_end - self.lat_start)
 
-        print("Calculating sub-surface velocity.")
+        if verbose:
+            print("Calculating sub-surface velocity.")
         # Convert to m s-1 calculate meridional and zonal velocities.
         self.sub_surf_speed = self.profile_ddist*1000./self.profile_dt
         self.sub_surf_u = self.sub_surf_speed*np.sin(self.profile_bearing)
         self.sub_surf_v = self.sub_surf_speed*np.cos(self.profile_bearing)
 
-        print("Interpolating missing velocity values.")
+        if verbose:
+            print("Interpolating missing velocity values.")
         # Fill missing U, V values using linear interpolation otherwise we
         # run into difficulties using cumtrapz next.
         self.U = self.__fill_missing(self.U)
         self.V = self.__fill_missing(self.V)
 
         # Absolute velocity
-        self.calculate_absolute_velocity()
+        self.calculate_absolute_velocity(verbose=verbose)
 
-        print("Calculating thermodynamic variables.")
+        if verbose:
+            print("Calculating thermodynamic variables.")
         # Derive some important thermodynamics variables.
 
         # Absolute salinity.
@@ -344,35 +362,40 @@ class EMApexFloat(object):
         N2_ca, __ = gsw.Nsquared(self.SA, self.CT, self.P, self.lat_start)
         self.N2 = self.__regrid('ctd_ca', 'ctd', N2_ca)
 
-        print("Calculating float vertical velocity.")
+        if verbose:
+            print("Calculating float vertical velocity.")
         # Vertical velocity regridded onto ctd grid.
         dt = 86400.*np.diff(self.UTC, axis=0)  # [s]
         Wz_ca = np.diff(self.z, axis=0)/dt
         self.Wz = self.__regrid('ctd_ca', 'ctd', Wz_ca)
 
-        print("Renaming Wp to Wpef.")
+        if verbose:
+            print("Renaming Wp to Wpef.")
         # Vertical water velocity.
         self.Wpef = self.Wp.copy()
         del self.Wp
 
-        print("Calculating shear.")
+        if verbose:
+            print("Calculating shear.")
         # Shear calculations.
         dUdz_ca = np.diff(self.U, axis=0)/np.diff(self.zef, axis=0)
         dVdz_ca = np.diff(self.V, axis=0)/np.diff(self.zef, axis=0)
         self.dUdz = self.__regrid('ef_ca', 'ef', dUdz_ca)
         self.dVdz = self.__regrid('ef_ca', 'ef', dVdz_ca)
 
-        print("Calculating Richardson number.")
+        if verbose:
+            print("Calculating Richardson number.")
         N2ef = self.__regrid('ctd', 'ef', self.N2)
         self.Ri = N2ef/(self.dUdz**2 + self.dVdz**2)
 
-        print("Regridding piston position to ctd.\n")
+        if verbose:
+            print("Regridding piston position to ctd.\n")
         # Regrid piston position.
         self.ppos = self.__regrid('ctd_ca', 'ctd', self.ppos_ca)
 
         self.update_profiles()
 
-    def calculate_absolute_velocity(self):
+    def calculate_absolute_velocity(self, verbose=True):
 
         print("Estimating absolute velocity and subsurface position.")
         # Absolute velocity defined as relative velocity plus mean velocity
@@ -393,7 +416,8 @@ class EMApexFloat(object):
         for idx in didxs:
             # Check that a down up profile pair exists, if not, then skip.
             if (self.hpid[idx] + 1) != self.hpid[idx+1]:
-                print('  No pair, continue.')
+                if verbose:
+                    print('  No pair, continue.')
                 continue
 
             hpids = self.hpid[[idx, idx+1]]
@@ -404,8 +428,9 @@ class EMApexFloat(object):
 
             # If all values are NaN then skip.
             if np.sum(nans) == nans.size:
-                print("  hpid pair {}, {} all NaNs.".format(self.hpid[idx],
-                      self.hpid[idx+1]))
+                if verbose:
+                    print("  hpid pair {}, {} all NaNs.".format(self.hpid[idx],
+                          self.hpid[idx+1]))
                 nan_pairs.append(idx)
                 nan_pairs.append(idx+1)
                 continue
@@ -449,7 +474,8 @@ class EMApexFloat(object):
 
             successful_pairs.append(idx)
             successful_pairs.append(idx+1)
-            print("  hpid pair {}, {}.".format(hpids[0], hpids[1]))
+            if verbose:
+                print("  hpid pair {}, {}.".format(hpids[0], hpids[1]))
 
         self.x_ctd = self.__regrid('ef', 'ctd', self.x_ef)
         self.y_ctd = self.__regrid('ef', 'ctd', self.y_ef)
@@ -457,8 +483,9 @@ class EMApexFloat(object):
         failed_idxs = list(set(np.arange(len(self.hpid))) -
                            set(successful_pairs) -
                            set(nan_pairs))
-        print("Absolute velocity calculation failed for the following hpids:\n"
-              "{}".format(self.hpid[failed_idxs]))
+        if verbose:
+            print("Absolute velocity calculation failed for the following"
+                  " hpids:\n{}".format(self.hpid[failed_idxs]))
 
     def calculate_pressure_perturbation(self):
         """Perturbation pressure divided by density.
@@ -493,7 +520,7 @@ class EMApexFloat(object):
 
                 self.Pprime[~nans, i] = bi + (bii[0] - bii[-1])/(-z[0])
 
-    def generate_regular_grids(self, zmin=-1400., dz=5.):
+    def generate_regular_grids(self, zmin=-1400., dz=5., verbose=True):
 
         print("\nGenerating regular grids")
         print("------------------------\n")
@@ -516,7 +543,8 @@ class EMApexFloat(object):
                                                         'z', key)
                 setattr(self, name, var_grid)
 
-            print("  Added: {}.".format(name))
+            if verbose:
+                print("  Added: {}.".format(name))
 
         self.update_profiles()
 
@@ -956,7 +984,8 @@ def find_file(floatID, data_dir='~/storage/DIMES/EM-APEX'):
 
 def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
          pp_dir='~/storage/processed', apply_w=True,
-         apply_strain=True, apply_iso=True):
+         apply_strain=True, apply_iso=True, post_process=True, regrid=False,
+         verbose=True):
     """Given an ID number this function will attempt to load data. Use the
     optional boolean arguments to turn off additional processing if not
     required as this is performed by default. The hardcoded additional
@@ -964,7 +993,7 @@ def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
     data_dir = _os.path.expanduser(data_dir)
     pp_dir = _os.path.expanduser(pp_dir)
     float_path = find_file(floatID, data_dir)
-    Float = EMApexFloat(float_path, floatID)
+    Float = EMApexFloat(float_path, floatID, post_process, regrid, verbose)
 
     if apply_w:
         data_file = "{:g}_fix_p0k0M_fit_info.p".format(floatID)
@@ -979,3 +1008,16 @@ def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
         Float.apply_isopycnal_displacement(_os.path.join(pp_dir, data_file))
 
     return Float
+
+
+def load_DIMES(data_dir='~/storage/DIMES/EM-APEX',
+               pp_dir='~/storage/processed', apply_w=False, apply_strain=False,
+               apply_iso=False, post_process=True, regrid=False, verbose=False):
+
+    Floats = []
+
+    for floatID in FIDS_DIMES:
+        Floats.append(load(floatID, data_dir, pp_dir, apply_w, apply_strain,
+                           apply_iso, post_process, regrid, verbose))
+
+    return Floats
