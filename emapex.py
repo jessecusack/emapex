@@ -17,16 +17,7 @@ import copy as _copy
 import glob as _glob
 import os as _os
 import sys as _sys
-
 import gsw
-
-lib_path = _os.path.abspath('../modules')
-if lib_path not in _sys.path:
-    _sys.path.append(lib_path)
-
-lib_path = _os.path.abspath('../../ocean-tools')
-if lib_path not in _sys.path:
-    _sys.path.append(lib_path)
 
 import utils
 
