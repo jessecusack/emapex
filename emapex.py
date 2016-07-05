@@ -46,7 +46,8 @@ class Profile(object):
 
 #        print("Profile {} has been created.".format(hpid))
 
-    def interp(self, var_2_vals, var_2_name, var_1_name):
+    def interp(self, var_2_vals, var_2_name, var_1_name, left=None,
+               right=None):
         """
         Linear 1-D interpolation of variables stored by a Profile.
 
@@ -125,7 +126,8 @@ class Profile(object):
                 nans = nans_var_1 | nans_var_2
                 var_1, var_2 = var_1[~nans], var_2[~nans]
                 var_2_sorted, idxs = np.unique(var_2, return_index=True)
-                var_1_vals = np.interp(var_2_vals, var_2_sorted, var_1[idxs])
+                var_1_vals = np.interp(var_2_vals, var_2_sorted, var_1[idxs],
+                                       left, right)
 
             elif not equal_size:
                 nans_1 = nans_var_1 | np.isnan(t_1)
@@ -137,7 +139,8 @@ class Profile(object):
                 var_2_sorted, idxs = np.unique(var_2, return_index=True)
                 t_2_interp = np.interp(var_2_vals, var_2_sorted, t_2[idxs])
                 t_1_sorted, idxs = np.unique(t_1, return_index=True)
-                var_1_vals = np.interp(t_2_interp, t_1_sorted, var_1[idxs])
+                var_1_vals = np.interp(t_2_interp, t_1_sorted, var_1[idxs],
+                                       left, right)
 
             else:
                 raise RuntimeError('Cannot match time array and/or variable'
@@ -789,7 +792,8 @@ class EMApexFloat(object):
 
         return mean_profile(pfls, var_name, z_return, z_interp)
 
-    def get_interp_grid(self, hpids, var_2_vals, var_2_name, var_1_name):
+    def get_interp_grid(self, hpids, var_2_vals, var_2_name, var_1_name,
+                        left=None, right=None):
         """Grid data from multiple profiles into a matrix. Linear interpolation
         is performed on, but not across profiles.
 
@@ -837,7 +841,7 @@ class EMApexFloat(object):
 
         for i, profile in enumerate(profiles):
             var_1_grid[:, i] = profile.interp(var_2_vals, var_2_name,
-                                              var_1_name)
+                                              var_1_name, left, right)
 
         return number_grid, var_2_grid, var_1_grid
 
