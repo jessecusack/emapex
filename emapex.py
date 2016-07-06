@@ -20,6 +20,13 @@ import gsw
 
 import utils
 
+try:
+    gamman_exists = True
+    from pygamman import gamman as nds
+except ImportError:
+    gamman_exists = False
+
+
 __all__ = ['Profile', 'EMApexFloat', 'mean_profile', 'up_down_indices',
            'find_file', 'load', 'load_DIMES']
 
@@ -197,8 +204,8 @@ class EMApexFloat(object):
     contained on a ctd array
 
     """
-    def __init__(self, filepath, floatID, post_process=True, regrid=False,
-                 verbose=True):
+    def __init__(self, filepath, floatID, post_process=True,
+                 neutral_density=False, regrid=False, verbose=True):
 
         print("\nInitialising")
         print("------------\n")
@@ -280,6 +287,13 @@ class EMApexFloat(object):
 
         if regrid:
             self.generate_regular_grids(verbose=verbose)
+
+        if gamman_exists and neutral_density:
+            self.calculate_neutral_density()
+
+        if not gamman_exists:
+            print("Could not calculate neutral density because pygamman \n"
+                  "package could not be imported.")
 
     def post_process(self, verbose=True):
 
@@ -493,8 +507,8 @@ class EMApexFloat(object):
     def calculate_pressure_perturbation(self):
         """Perturbation pressure divided by density.
         Assumes hydrostatic balance.
-        See Kunze 2002.
-        See Nash 2005."""
+        See: Kunze et. al. 2002 JPO.
+        See: Nash et. al. 2005 JPO."""
 
         self.Pprime = self.P.copy()
 
@@ -522,6 +536,36 @@ class EMApexFloat(object):
                 bii = cumtrapz(bi, z, initial=0.)
 
                 self.Pprime[~nans, i] = bi + (bii[0] - bii[-1])/(-z[0])
+
+    def calculate_neutral_density(self):
+        """Label each CTD measurement with neutral density using Jackett and
+        McDougall code ported to python.
+
+        See: Jacket & McDougall 1997 JPO."""
+
+        print("Calculating neutral density.")
+
+        self.rho_n = self.P.copy()
+
+        for i, pfl in enumerate(self.Profiles):
+            # For now assume all NaNs in the same places for T, S and P.
+            nans = np.isnan(pfl.P)
+
+            S = pfl.S[~nans]
+            T = pfl.T[~nans]
+            P = pfl.P[~nans]
+
+            n = len(P)
+            if n == 0:
+                continue
+
+            lon = pfl.lon_start
+            lat = pfl.lat_start
+
+            rho_n_, __, __ = nds.gamma_n(S, T, P, n, lon, lat)
+            self.rho_n[~nans, i] = rho_n_
+
+        self.update_profiles()
 
     def generate_regular_grids(self, zmin=-1400., dz=5., verbose=True):
 
@@ -988,8 +1032,8 @@ def find_file(floatID, data_dir='~/storage/DIMES/EM-APEX'):
 
 def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
          pp_dir='~/storage/processed', apply_w=True,
-         apply_strain=True, apply_iso=True, post_process=True, regrid=False,
-         verbose=True):
+         apply_strain=True, apply_iso=True, post_process=True,
+         neutral_density=False, regrid=False, verbose=True):
     """Given an ID number this function will attempt to load data. Use the
     optional boolean arguments to turn off additional processing if not
     required as this is performed by default. The hardcoded additional
@@ -997,7 +1041,8 @@ def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
     data_dir = _os.path.expanduser(data_dir)
     pp_dir = _os.path.expanduser(pp_dir)
     float_path = find_file(floatID, data_dir)
-    Float = EMApexFloat(float_path, floatID, post_process, regrid, verbose)
+    Float = EMApexFloat(float_path, floatID, post_process, neutral_density,
+                        regrid, verbose)
 
     if apply_w:
         data_file = "{:g}_fix_p0k0M_fit_info.p".format(floatID)
@@ -1016,12 +1061,14 @@ def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
 
 def load_DIMES(data_dir='~/storage/DIMES/EM-APEX',
                pp_dir='~/storage/processed', apply_w=False, apply_strain=False,
-               apply_iso=False, post_process=True, regrid=False, verbose=False):
+               apply_iso=False, post_process=True, neutral_density=False,
+               regrid=False, verbose=False):
 
     Floats = []
 
     for floatID in FIDS_DIMES:
         Floats.append(load(floatID, data_dir, pp_dir, apply_w, apply_strain,
-                           apply_iso, post_process, regrid, verbose))
+                           apply_iso, post_process, neutral_density,
+                           regrid, verbose))
 
     return Floats
