@@ -9,9 +9,10 @@ data.
 """
 
 import numpy as np
-import scipy.io as _io
+from scipy.io import loadmat as _loadmat
 from scipy.interpolate import griddata
 from scipy.integrate import trapz, cumtrapz
+import fnmatch as _fnmatch
 import pickle as _pickle
 import copy as _copy
 import glob as _glob
@@ -167,8 +168,8 @@ class Profile(object):
         """
 
         if parent_float.floatID != self.floatID:
-            raise RuntimeError('You are attempting to update this profile '
-                               'with the wrong parent float.')
+            raise ValueError('You are attempting to update this profile '
+                             'with the wrong parent float.')
 
         data = vars(parent_float)
 
@@ -192,6 +193,8 @@ class EMApexFloat(object):
     ## denotes the last two digits of the year, e.g. 11 for 2011. Also provide
     the ID number of the particular float to extract from the file.
 
+    Alternatively profile the base directory for the dec and vel folders.
+
     Notes
     -----
 
@@ -204,7 +207,7 @@ class EMApexFloat(object):
     contained on a ctd array
 
     """
-    def __init__(self, filepath, floatID, post_process=True,
+    def __init__(self, path, floatID, post_process=True,
                  neutral_density=False, regrid=False, verbose=True):
 
         print("\nInitialising")
@@ -216,18 +219,128 @@ class EMApexFloat(object):
             "Loading data...".format(floatID)
         )
 
+        if _os.path.isdir(path):
+            self.__dir_init(path, floatID, verbose)
+        elif _os.path.isfile(path) and _os.path.basename(path)[:6] == 'allpro':
+            self.__allprofs_init(path, floatID, verbose)
+        else:
+            raise ValueError("Cannot read data from {}".format(path))
+
+        if post_process:
+            self.post_process(verbose)
+
+        if regrid:
+            self.generate_regular_grids(verbose)
+
+        if gamman_exists and neutral_density:
+            self.calculate_neutral_density()
+
+        if not gamman_exists:
+            print("Could not calculate neutral density because pygamman \n"
+                  "package could not be imported.")
+
+    def __dir_init(self, dirpath, floatID, verbose):
+        # This block searchs the directory tree for all the relevent files and
+        # puts them in a dictionary organised by hpid number.
+        # ctd, efp, gps, mis, vel, vit
+        filesdict = {}
+        mis_file = None
+        gps_file = None
+        single_mis_file = False
+        single_gps_file = False
+        searchstr = '*{}*vel.mat'.format(floatID)
+        for root, dirnames, filenames in _os.walk(dirpath):
+            for filename in _fnmatch.filter(filenames, searchstr):
+                nameparts = filename.split('-')
+
+                try:
+                    hpid = int(nameparts[2])
+                except ValueError:
+                    if nameparts[2] == 'mis.mat':
+                        single_mis_file = True
+                        mis_file = _os.path.join(root, filename)
+                        continue
+                    elif nameparts[2] == 'gps.mat':
+                        single_gps_file = True
+                        gps_file = _os.path.join(root, filename)
+                        continue
+
+                filetype = nameparts[3].split('.')[0]
+                fullname = _os.path.join(root, filename)
+                if hpid in filesdict.keys():
+                    filesdict[hpid][filetype] = fullname
+                else:
+                    filesdict[hpid] = {filetype: fullname}
+
+        self.hpid = np.array(filesdict.keys())
+        Nprofiles = self.hpid.size
+
+        # Work out size of arrays required.
+        pad_ctd = 0
+        pad_ef = 0
+        for hp in self.hpid:
+            velfile = filesdict[hp]['vel']
+            veldata = _loadmat(velfile, squeeze_me=True,
+                               variable_names=['ctd_mlt', 'efp_mlt'])
+            pad_ctd = max(pad_ctd, np.asarray(veldata['ctd_mlt']).size)
+            pad_ef = max(pad_ef, np.asarray(veldata['efp_mlt']).size)
+
+        # CTD attributes.
+        ctd_keys = ['Pctd', 'T', 'S', 'ctd_mlt', 'pc_ctd']
+        ctd_attrs = ['P', 'T', 'S', 'UTC', 'ppos']
+        # ef attributes.
+        ef_keys = ['U1', 'U2', 'V1', 'V2', 'Pef', 'efp_mlt']
+        ef_attrs = ['U1', 'U2', 'V1', 'V2', 'Pef', 'UTCef']
+        # Singleton attributes.
+        s_keys = ['lon', 'lat', 'LON', 'LAT', 'MLT_GPS']
+        s_attrs = ['lon', 'lat', 'lon_gps', 'lat_gps', 'utc_gps']
+
+        names = ctd_keys + ef_keys + s_keys
+
+        # Initialise arrays.
+        for ctd_attr in ctd_attrs:
+            setattr(self, ctd_attr, np.NaN*np.zeros((pad_ctd, Nprofiles)))
+        for ef_attr in ef_attrs:
+            setattr(self, ef_attr, np.NaN*np.zeros((pad_ef, Nprofiles)))
+        for s_attr in s_attrs:
+            setattr(self, s_attr, np.NaN*np.zeros(Nprofiles))
+
+        # Load vel data.
+        for i, hp in enumerate(self.hpid):
+            velfile = filesdict[hp]['vel']
+            veldata = _loadmat(velfile, squeeze_me=True, variable_names=names)
+            Nctd = np.asarray(veldata['ctd_mlt']).size
+            Nef = np.asarray(veldata['efp_mlt']).size
+
+            for ctd_key, ctd_attr in zip(ctd_keys, ctd_attrs):
+                if Nctd < 2:
+                    continue
+                getattr(self, ctd_attr)[:Nctd, i] = veldata[ctd_key]
+
+            for ef_key, ef_attr in zip(ef_keys, ef_attrs):
+                if Nef < 2:
+                    continue
+                getattr(self, ef_attr)[:Nef, i] = veldata[ef_key]
+
+            for s_key, s_attr in zip(s_keys, s_attrs):
+                getattr(self, s_attr)[i] = veldata[s_key]
+
+        print("All numerical data appears to have been loaded successfully.\n")
+
+        print("Creating array of half profiles.\n")
+
+        self.Profiles = np.array([Profile(self, h) for h in self.hpid])
+
+    def __allprofs_init(self, filepath, floatID, verbose):
         # Loaded data is a dictionary.
-        data = _io.loadmat(filepath, squeeze_me=True)
+        data = _loadmat(filepath, squeeze_me=True)
 
         isFloat = data.pop('flid') == floatID
         del data['ar']
         self.hpid = data.pop('hpid')[isFloat]
-#        flip_indx = up_down_indices(self.hpid, 'up')
-
-        # Figure out some useful times.
-        t_ctd = data['UTC'][:, isFloat]
-        self.UTC_start = t_ctd[0, :]
-        self.UTC_end = np.nanmax(t_ctd, axis=0)
+        if self.hpid.size == 0:
+            raise RuntimeError('There appear to be no profiles for float {} in'
+                               ' {}'.format(floatID, filepath))
 
         # Load the data!
         for key in data.keys():
@@ -241,8 +354,6 @@ class EMApexFloat(object):
             elif d == 1:
                 setattr(self, key, data[key][isFloat])
             elif d == 2:
-                # This flips ascent data first, then adds it as an attribute.
-#                setattr(self, key, flip_cols(data[key][:, isFloat], flip_indx))
                 setattr(self, key, data[key][:, isFloat])
             else:
                 if verbose:
@@ -252,6 +363,19 @@ class EMApexFloat(object):
                 print("  Loaded: {}.".format(key))
 
         print("All numerical data appears to have been loaded successfully.\n")
+
+        print("Creating array of half profiles.\n")
+
+        self.Profiles = np.array([Profile(self, h) for h in self.hpid])
+
+    def post_process(self, verbose=True):
+
+        print("\nPost processing")
+        print("---------------\n")
+
+        # Figure out some useful times.
+        self.UTC_start = self.UTC[0, :]
+        self.UTC_end = np.nanmax(self.UTC, axis=0)
 
         if verbose:
             print("Creating time variable dUTC with units of seconds.")
@@ -275,30 +399,8 @@ class EMApexFloat(object):
             print("Calculating heights.")
         # Depth.
         self.z = gsw.z_from_p(self.P, self.lat_start)
-        self.z_ca = gsw.z_from_p(self.P_ca, self.lat_start)
+#        self.z_ca = gsw.z_from_p(self.P_ca, self.lat_start)
         self.zef = gsw.z_from_p(self.Pef, self.lat_start)
-
-        print("Creating array of half profiles.\n")
-
-        self.Profiles = np.array([Profile(self, h) for h in self.hpid])
-
-        if post_process:
-            self.post_process(verbose=verbose)
-
-        if regrid:
-            self.generate_regular_grids(verbose=verbose)
-
-        if gamman_exists and neutral_density:
-            self.calculate_neutral_density()
-
-        if not gamman_exists:
-            print("Could not calculate neutral density because pygamman \n"
-                  "package could not be imported.")
-
-    def post_process(self, verbose=True):
-
-        print("\nPost processing")
-        print("---------------\n")
 
         if verbose:
             print("Calculating distance along trajectory.")
@@ -1013,7 +1115,7 @@ def up_down_indices(hpid_array, up_or_down='up'):
 
 def what_floats_are_in_here(fname):
     """Finds all unique float ID numbers from a given allprofs##.mat file."""
-    fs = _io.loadmat(fname, squeeze_me=True, variable_names='flid')['flid']
+    fs = _loadmat(fname, squeeze_me=True, variable_names='flid')['flid']
     return np.unique(fs[~np.isnan(fs)])
 
 
