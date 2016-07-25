@@ -722,7 +722,7 @@ class EMApexFloat(object):
             data = [getattr(self, data_name) for data_name in
                     wfi['data_names']]
 
-            self.Ws = w_model(wfi['p'], data, wfi['fixed'])
+            self.Ws = w_model(wfi['p'], data, wfi['pfixed'])
             print("  Added: Ws.")
 
         elif wfi['profiles'] == 'updown':
@@ -732,13 +732,13 @@ class EMApexFloat(object):
             up = up_down_indices(self.hpid, 'up')
             data = [getattr(self, data_name)[:, up] for
                     data_name in wfi['data_names']]
-            self.Ws[:, up] = w_model(wfi['p'][0], data, wfi['fixed'])
+            self.Ws[:, up] = w_model(wfi['p'][0], data, wfi['pfixed'])
             print("  Added: Ws. (ascents)")
 
             down = up_down_indices(self.hpid, 'down')
             data = [getattr(self, data_name)[:, down] for
                     data_name in wfi['data_names']]
-            self.Ws[:, down] = w_model(wfi['p'][1], data, wfi['fixed'])
+            self.Ws[:, down] = w_model(wfi['p'][1], data, wfi['pfixed'])
             print("  Added: Ws. (descents)")
 
         else:
