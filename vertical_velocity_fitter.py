@@ -107,7 +107,8 @@ def fitter(Float, p0, pfixed, **kwargs):
     cargs = (pfixed, still_water_model, w_f, data, cf_key)
 
     def cost(params, fixed, model, wf, data, cf_key='diffsq'):
-        return np.sum(vvm.cost(params, fixed, model, wf, data, cf_key))
+        cost_ = vvm.cost(params, fixed, model, wf, data, cf_key)
+        return np.sum(cost_)
 
     res = op.minimize(cost, p0, args=cargs, method=method, bounds=param_bounds)
 
@@ -207,20 +208,22 @@ def assess_w_fit(Float, save_figures=False, save_id='', save_dir=''):
         plt.close(fig)
 
     # Time series of different velocity measures.
-    hpid1 = hpids[0]
+    hpid_use = np.arange(10,17)
+    __, idx = Float.get_profiles(hpid_use, ret_idxs=True)
 
     fig = plt.figure(figsize=(6.5, 3))
-    N = 6
-    time, Ww = Float.get_timeseries(np.arange(hpid1, hpid1+N), 'Ww')
-    __, Wz = Float.get_timeseries(np.arange(hpid1, hpid1+N), 'Wz')
-    __, Ws = Float.get_timeseries(np.arange(hpid1, hpid1+N), 'Ws')
+
+    time, Ww = Float.get_timeseries(hpid_use, 'Ww')
+    __, Wz = Float.get_timeseries(hpid_use, 'Wz')
+    __, Ws = Float.get_timeseries(hpid_use, 'Ws')
+    time[time < 700000.] = np.NaN
     plt.plot(time, Ww)
     plt.plot(time, Wz)
     plt.plot(time, Ws)
     plt.ylabel('$W_w$, $W_f$, $W_s$ (m s$^{-1}$)')
     plt.xlabel('Time')
     plt.xticks(rotation=45)
-    title_str = ("Float {}, half profiles {}").format(floatID, hpids[0:N])
+    title_str = ("Float {}, half profiles {}").format(floatID, Float.hpid[idx])
     plt.title(title_str)
     plt.legend(['$W_w$', '$W_f$', '$W_s$'])
 
