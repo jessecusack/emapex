@@ -373,6 +373,9 @@ class EMApexFloat(object):
         print("\nPost processing")
         print("---------------\n")
 
+        # Very basic
+        self.ascent = self.hpid % 2 == 0
+
         # Figure out some useful times.
         self.UTC_start = self.UTC[0, :]
         self.UTC_end = np.nanmax(self.UTC, axis=0)
