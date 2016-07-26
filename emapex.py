@@ -375,6 +375,8 @@ class EMApexFloat(object):
 
         # Very basic
         self.ascent = self.hpid % 2 == 0
+        self.ascent_ctd = self.ascent*np.ones_like(self.UTC, dtype=int)
+        self.ascent_ef = self.ascent*np.ones_like(self.UTCef, dtype=int)
 
         # Figure out some useful times.
         self.UTC_start = self.UTC[0, :]
