@@ -720,35 +720,16 @@ class EMApexFloat(object):
         wfi = getattr(self, '__wfi')
 
         import vertical_velocity_model as vvm
-        w_model = vvm.still_water_model_1
+        w_model = getattr(vvm, wfi['model_func_name'])
+        print("Model profiles: {}\n"
+              "Model function: {}".format(wfi['profiles'],
+                                          wfi['model_func_name']))
 
-        if wfi['profiles'] == 'all':
+        data = [getattr(self, data_name) for data_name in
+                wfi['data_names']]
 
-            data = [getattr(self, data_name) for data_name in
-                    wfi['data_names']]
-
-            self.Ws = w_model(wfi['p'], data, wfi['pfixed'])
-            print("  Added: Ws.")
-
-        elif wfi['profiles'] == 'updown':
-
-            self.Ws = np.nan*np.ones_like(self.Wz)
-
-            up = up_down_indices(self.hpid, 'up')
-            data = [getattr(self, data_name)[:, up] for
-                    data_name in wfi['data_names']]
-            self.Ws[:, up] = w_model(wfi['p'][0], data, wfi['pfixed'])
-            print("  Added: Ws. (ascents)")
-
-            down = up_down_indices(self.hpid, 'down')
-            data = [getattr(self, data_name)[:, down] for
-                    data_name in wfi['data_names']]
-            self.Ws[:, down] = w_model(wfi['p'][1], data, wfi['pfixed'])
-            print("  Added: Ws. (descents)")
-
-        else:
-            raise ValueError("Don't know what to do with wfi['profiles']",
-                             wfi['profiles'])
+        self.Ws = w_model(wfi['p'], data, wfi['pfixed'])
+        print("  Added: Ws.")
 
         self.Ww = self.Wz - self.Ws
         print("  Added: Ww.")
