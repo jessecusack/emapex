@@ -52,7 +52,7 @@ def fitter(Float, p0, pfixed, **kwargs):
     """
 
     hpids = kwargs.pop('hpids', np.arange(600))
-    Plims = kwargs.pop('Plims', (60., 1400.))
+    Plims = kwargs.pop('Plims', (60., 2000.))
     profiles = kwargs.pop('profiles', 'all')
     cf_key = kwargs.pop('cf_key', 'diffsq')
     save_name = kwargs.pop('save_name', None)
@@ -111,6 +111,9 @@ def fitter(Float, p0, pfixed, **kwargs):
         return np.sum(cost_)
 
     res = op.minimize(cost, p0, args=cargs, method=method, bounds=param_bounds)
+
+#    minimizer_kwargs = {'args': cargs, 'bounds': param_bounds}
+#    res = op.basinhopping(cost, p0, minimizer_kwargs=minimizer_kwargs)
 
     p = res.x
 
