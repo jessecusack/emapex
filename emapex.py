@@ -378,6 +378,10 @@ class EMApexFloat(object):
         self.ascent_ctd = self.ascent*np.ones_like(self.UTC, dtype=int)
         self.ascent_ef = self.ascent*np.ones_like(self.UTCef, dtype=int)
 
+        # Estimate number of observations.
+        self.nobs_ctd = np.sum(~np.isnan(self.UTC), axis=0)
+        self.nobs_ef = np.sum(~np.isnan(self.UTCef), axis=0)
+
         # Figure out some useful times.
         self.UTC_start = self.UTC[0, :]
         self.UTC_end = np.nanmax(self.UTC, axis=0)
