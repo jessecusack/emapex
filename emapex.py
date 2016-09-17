@@ -20,6 +20,7 @@ import os as _os
 import gsw
 
 import utils
+import my_paths
 
 try:
     gamman_exists = True
@@ -235,7 +236,7 @@ class EMApexFloat(object):
         if gamman_exists and neutral_density:
             self.calculate_neutral_density()
 
-        if not gamman_exists:
+        if neutral_density and not gamman_exists:
             print("Could not calculate neutral density because pygamman \n"
                   "package could not be imported.")
 
@@ -1109,7 +1110,7 @@ def what_floats_are_in_here(fname):
     return np.unique(fs[~np.isnan(fs)])
 
 
-def find_file(floatID, data_dir='~/storage/DIMES/EM-APEX'):
+def find_file(floatID, data_dir=my_paths.emapex_data):
     """Locate the file that contains data for the given ID number."""
     data_dir = _os.path.expanduser(data_dir)
     file_paths = _glob.glob(_os.path.join(data_dir, 'allprofs*.mat'))
@@ -1122,8 +1123,8 @@ def find_file(floatID, data_dir='~/storage/DIMES/EM-APEX'):
     raise ValueError("Float not found in database, check ID.")
 
 
-def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
-         pp_dir='~/storage/processed', apply_w=True,
+def load(floatID, data_dir=my_paths.emapex_data,
+         pp_dir=my_paths.processed, apply_w=True,
          apply_strain=True, apply_iso=True, post_process=True,
          neutral_density=False, regrid=False, verbose=True):
     """Given an ID number this function will attempt to load data. Use the
@@ -1151,10 +1152,10 @@ def load(floatID, data_dir='~/storage/DIMES/EM-APEX',
     return Float
 
 
-def load_DIMES(data_dir='~/storage/DIMES/EM-APEX',
-               pp_dir='~/storage/processed', apply_w=False, apply_strain=False,
-               apply_iso=False, post_process=True, neutral_density=False,
-               regrid=False, verbose=False):
+def load_DIMES(data_dir=my_paths.emapex_data, pp_dir=my_paths.processed, 
+               apply_w=False, apply_strain=False, apply_iso=False, 
+               post_process=True, neutral_density=False, regrid=False, 
+               verbose=False):
 
     Floats = []
 
