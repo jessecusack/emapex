@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import corner
 import pickle
-
+import my_paths
 
 def fitter(Float, p0, pfixed, **kwargs):
     """This function takes an EM-APEX float, fits a vertical velocity model
@@ -55,6 +55,7 @@ def fitter(Float, p0, pfixed, **kwargs):
     Plims = kwargs.pop('Plims', (60., 2000.))
     profiles = kwargs.pop('profiles', 'all')
     cf_key = kwargs.pop('cf_key', 'diffsq')
+    save_path = kwargs.pop('save_path', my_paths.processed)
     save_name = kwargs.pop('save_name', None)
     w_f_thresh = kwargs.pop('w_f_thresh', 0.1)
     N_bootstrap = kwargs.pop('N_bootstrap', 200)
@@ -159,7 +160,7 @@ def fitter(Float, p0, pfixed, **kwargs):
         'w_f_thresh': w_f_thresh}
 
     if save_name is not None:
-        with open(save_name, 'wb') as f:
+        with open(os.path.join(save_path, save_name), 'wb') as f:
             pickle.dump(wfi, f)
 
     return wfi

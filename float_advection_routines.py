@@ -10,14 +10,7 @@ Advection routines.
 
 import numpy as np
 from scipy.integrate import odeint
-import sys as _sys
-import os as _os
-
 import gsw
-
-lib_path = _os.path.abspath('../../ocean-tools')
-if lib_path not in _sys.path:
-    _sys.path.append(lib_path)
 
 import gravity_waves as gw
 import utils
