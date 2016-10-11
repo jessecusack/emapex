@@ -971,6 +971,14 @@ class EMApexFloat(object):
         """
 
         profiles = self.get_profiles(hpids)
+
+        # If only one hpid was passed, shortcut function.
+        if type(profiles) is Profile:
+            number_grid = np.zeros(len(var_2_vals))
+            var_1_grid = profiles.interp(var_2_vals, var_2_name, var_1_name,
+                                         left, right)
+            return number_grid, var_2_vals, var_1_grid
+
         number = np.arange(len(profiles))
 
         number_grid, var_2_grid = np.meshgrid(number, var_2_vals)
@@ -1152,9 +1160,9 @@ def load(floatID, data_dir=my_paths.emapex_data,
     return Float
 
 
-def load_DIMES(data_dir=my_paths.emapex_data, pp_dir=my_paths.processed, 
-               apply_w=False, apply_strain=False, apply_iso=False, 
-               post_process=True, neutral_density=False, regrid=False, 
+def load_DIMES(data_dir=my_paths.emapex_data, pp_dir=my_paths.processed,
+               apply_w=False, apply_strain=False, apply_iso=False,
+               post_process=True, neutral_density=False, regrid=False,
                verbose=False):
 
     Floats = []
