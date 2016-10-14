@@ -10,7 +10,7 @@ import numpy as np
 import scipy.signal as sig
 import pickle
 import window as wdw
-from TKED_parameterisations import adiabatic_level, w_scales
+import TKED_parameterisations as TKED
 
 
 def adiabatic_level_float(Float, P_bin_width, save_dir):
@@ -25,7 +25,7 @@ def adiabatic_level_float(Float, P_bin_width, save_dir):
 
     for i, (P, SA, T, lat) in enumerate(zip(Pg.T, SAg.T, Tg.T, lats)):
         print("hpid: {}".format(Float.hpid[i]))
-        N2_ref[:, i] = adiabatic_level(P, SA, T, lat, P_bin_width)
+        N2_ref[:, i] = TKED.adiabatic_level(P, SA, T, lat, P_bin_width)
 
     save_name = "{:g}_N2_ref_{:g}dbar.p".format(Float.floatID, P_bin_width)
     file_path = os.path.join(save_dir, save_name)
@@ -53,8 +53,9 @@ def smooth_density_float(Float, z_bin_width, save_dir):
     pickle.dump(srho_1, open(file_path, 'wb'))
 
 
-def w_scales_float(Float, hpids, xvar, x, width=10., lc=30., c=1., eff=0.2,
-                   btype='highpass', we=1e-3, ret_noise=False, ret_VKE=False):
+def w_scales_float(Float, hpids, xvar, x, width=10., overlap=-1., lc=30., c=1.,
+                   eff=0.2, btype='highpass', we=1e-3, ret_noise=False,
+                   ret_VKE=False):
     """Wrapper for the w_scales function that takes Float objects.
 
     For xvar == timeheight, the signal is first low pass filtered in time and
@@ -112,12 +113,34 @@ def w_scales_float(Float, hpids, xvar, x, width=10., lc=30., c=1., eff=0.2,
     for i in xrange(Np):
         wp, N2p = w[:, i], N2[:, i]
         epsilon[:, i], kappa[:, i], epsilon_noise[:, i], noise_flag[:, i] = \
-            w_scales(wp, x, N2p, dx, width, lc, c, eff, btype, we, True)
+            TKED.w_scales(wp, x, N2p, dx, width, overlap, lc, c, eff, btype,
+                          we, True)
 
     if ret_noise:
         return epsilon, kappa, epsilon_noise, noise_flag
     else:
         return epsilon, kappa
+
+
+def thorpe_float(Float, hpids, xvar='rho_1', zvar='z', R0=0.25, acc=2e-3,
+                 xhinge=1030., delta=2e-3):
+
+    pfls, idxs = Float.get_profiles(hpids, ret_idxs=True)
+
+    thorpe_scales = np.zeros_like(Float.P[:, idxs])
+    thorpe_disp = np.zeros_like(Float.P[:, idxs])
+
+    for i, pfl in enumerate(pfls):
+        nnan = ~np.isnan(pfl.P)
+        x = getattr(pfl, xvar)[nnan]
+        z = getattr(pfl, zvar)[nnan]
+
+        __, __, x_int = TKED.intermediate_profile(x, xhinge, delta)
+
+        thorpe_scales[nnan, i], thorpe_disp[nnan, i] = \
+            TKED.thorpe_scales(z, x, R0=R0, acc=acc, full_output=False)
+
+    return thorpe_scales, thorpe_disp
 
 #def analyse_profile(Pfl, params=default_params):
 #    """ """
