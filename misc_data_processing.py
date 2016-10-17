@@ -129,6 +129,7 @@ def thorpe_float(Float, hpids, xvar='rho_1', zvar='z', R0=0.25, acc=2e-3,
 
     thorpe_scales = np.zeros_like(Float.P[:, idxs])
     thorpe_disp = np.zeros_like(Float.P[:, idxs])
+    Nsq_thorpe = np.zeros_like(Float.P[:, idxs])
 
     for i, pfl in enumerate(pfls):
         nnan = ~np.isnan(pfl.P)
@@ -137,10 +138,11 @@ def thorpe_float(Float, hpids, xvar='rho_1', zvar='z', R0=0.25, acc=2e-3,
 
         __, __, x_int = TKED.intermediate_profile(x, xhinge, delta)
 
-        thorpe_scales[nnan, i], thorpe_disp[nnan, i] = \
-            TKED.thorpe_scales(z, x, R0=R0, acc=acc, full_output=False)
+        thorpe_scales[nnan, i], thorpe_disp[nnan, i], Nsq_thorpe[nnan, i], \
+            __, __, __, __ = \
+            TKED.thorpe_scales(z, x, R0=R0, acc=acc, full_output=True)
 
-    return thorpe_scales, thorpe_disp
+    return thorpe_scales, thorpe_disp, Nsq_thorpe
 
 #def analyse_profile(Pfl, params=default_params):
 #    """ """
