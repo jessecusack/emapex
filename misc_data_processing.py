@@ -123,7 +123,7 @@ def w_scales_float(Float, hpids, xvar, x, width=10., overlap=-1., lc=30., c=1.,
 
 
 def thorpe_float(Float, hpids, xvar='rho_1', zvar='z', R0=0.25, acc=2e-3,
-                 xhinge=1030., delta=2e-3):
+                 xhinge=1030., use_int=False):
 
     pfls, idxs = Float.get_profiles(hpids, ret_idxs=True)
 
@@ -136,7 +136,9 @@ def thorpe_float(Float, hpids, xvar='rho_1', zvar='z', R0=0.25, acc=2e-3,
         x = getattr(pfl, xvar)[nnan]
         z = getattr(pfl, zvar)[nnan]
 
-        __, __, x_int = TKED.intermediate_profile(x, xhinge, delta)
+        if use_int:
+            __, __, x_int = TKED.intermediate_profile(x, xhinge, acc)
+            x = x_int
 
         thorpe_scales[nnan, i], thorpe_disp[nnan, i], Nsq_thorpe[nnan, i], \
             __, __, __, __ = \
